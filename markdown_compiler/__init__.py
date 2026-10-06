@@ -3,7 +3,7 @@ This file contains functions that work on entire documents at a time
 (and not line-by-line).
 '''
 
-from markdown_compiler.util.line_functions import *
+from markdown_compiler.util.line_functions import compile_headers, compile_strikethrough, compile_bold_stars, compile_bold_underscore, compile_italic_star, compile_italic_underscore, compile_code_inline, compile_images, compile_links
 
 
 def compile_lines(text):
@@ -133,16 +133,23 @@ def compile_lines(text):
     lines = text.split('\n')
     new_lines = []
     in_paragraph = False
+    in_pre = False
     for line in lines:
-        line = line.strip()
-        if line=='':
-            if in_paragraph:
-                line='</p>'
+
+        if line.find('```') != -1 and line[0] != '#':
+            if not in_pre:
+                in_pre = True
+                line = '<pre>'
+
+        if line == '':
+            if in_paragraph and not in_pre:
+                line = '</p>'
                 in_paragraph = False
-        else:
-            if line[0] != '#' and not in_paragraph:
-                in_paragraph = True
-                line = '<p>\n'+line
+        elif not in_paragraph and not in_pre and line[0] != '#':
+            in_paragraph = True
+            line = '<p>\n' + line
+
+        if not in_pre:
             line = compile_headers(line)
             line = compile_strikethrough(line)
             line = compile_bold_stars(line)
@@ -152,6 +159,12 @@ def compile_lines(text):
             line = compile_code_inline(line)
             line = compile_images(line)
             line = compile_links(line)
+
+        if line.find('```') != -1 and line[0] != '#':
+            if in_pre:
+                line = '</pre>'
+                in_pre = False
+
         new_lines.append(line)
     new_text = '\n'.join(new_lines)
     return new_text
@@ -188,10 +201,10 @@ def markdown_to_html(markdown, add_css):
 <link rel="stylesheet" href="https://izbicki.me/css/code.css" />
 <link rel="stylesheet" href="https://izbicki.me/css/default.css" />
         '''
-    html+='''
+    html += '''
 </head>
 <body>
-    '''+compile_lines(markdown)+'''
+    ''' + compile_lines(markdown) + '''
 </body>
 </html>
     '''
@@ -225,6 +238,9 @@ def minify(html):
     >>> minify('a\n\n\n\n\n\n\n\n\n\n\n\n\n\nb\n\n\n\n\n\n\n\n\n\n')
     'a b'
     '''
+
+    characters = html.split()
+    html = ' '.join(characters)
     return html
 
 
@@ -235,10 +251,8 @@ def convert_file(input_file, add_css):
     then the output filename will be `README.html`.
 
     NOTE:
-    It is difficult to write meaningful doctests for functions that deal with files.
-    This is because we would have to create a bunch of different files to do so.
-    Therefore, there are no tests for this function.
-    But we can still be confident that this function will work because of the extensive tests on the "helper functions" that this function depends on.
+    The project's command-line check exercises file reading, compilation, and
+    writing together. Inspect a generated code block as well as the helper tests.
     '''
 
     # validate that the input file is a markdown file
@@ -246,13 +260,13 @@ def convert_file(input_file, add_css):
         raise ValueError('input_file does not end in .md')
 
     # load the input file
-    with open(input_file, 'r') as f:
+    with open(input_file, 'r', encoding='utf-8') as f:
         markdown = f.read()
 
     # generate the HTML from the Markdown
     html = markdown_to_html(markdown, add_css)
-    html = minify(html)
+    # Keep code-block newlines and indentation in the saved page.
 
     # write the output file
-    with open(input_file[:-2]+'html', 'w') as f:
+    with open(input_file[:-2] + 'html', 'w', encoding='utf-8') as f:
         f.write(html)
